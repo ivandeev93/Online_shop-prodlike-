@@ -1,21 +1,3 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List
-
-from app.models.cart_items import CartItem
-
-
-class CartItemRepository:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-
-    async def get_by(self, cart: str) -> CartItem | None:
-        result = await self.db.scalar(select())
-        return result
-
-
-# app/repositories/cart_repository.py
-
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -37,7 +19,7 @@ class CartRepository:
         return result.first()
 
     @staticmethod
-    async def get_cart_item(db: AsyncSession, user_id: int, product_id: int):
+    async def get_cart_item(db: AsyncSession, user_id: int, product_id: int) -> CartItemModel | None:
         result = await db.scalars(
             select(CartItemModel)
             .options(selectinload(CartItemModel.product))

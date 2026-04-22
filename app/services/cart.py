@@ -1,20 +1,26 @@
 # CartService
 
-
-# app/services/cart_service.py
-
 from decimal import Decimal
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_current_user
+from app.core.dependencies import get_async_db
+
+from app.models.users import User as UserModel
 from app.models.cart_items import CartItem as CartItemModel
 from app.repositories.cart import CartRepository
-
+from app.schemas import (
+    Cart as CartSchema,
+    CartItem as CartItemSchema,
+    CartItemCreate,
+    CartItemUpdate
+)
 
 class CartService:
 
     @staticmethod
-    async def _ensure_product_available(db: AsyncSession, product_id: int):
+    async def _ensure_product_available(db: AsyncSession, product_id: int) -> None:
         product = await CartRepository.get_product(db, product_id)
         if not product:
             raise HTTPException(
@@ -23,8 +29,8 @@ class CartService:
             )
 
     @staticmethod
-    async def get_cart(db: AsyncSession, user_id: int):
-        items = await CartRepository.get_cart_items(db, user_id)
+    async def get_cart(db: AsyncSession, current_user: UserModel = Depends(get_current_user)):
+        items = await CartRepository.get_cart_items(db, current_user.id)
 
         total_quantity = sum(item.quantity for item in items)
 
@@ -34,12 +40,12 @@ class CartService:
             for item in items
         )
 
-        return {
-            "user_id": user_id,
-            "items": items,
-            "total_quantity": total_quantity,
-            "total_price": total_price,
-        }
+        return CartSchema(
+            user_id=current_user.id,
+            items=items,
+            total_quantity=total_quantity,
+            total_price=total_price,
+        )
 
     @staticmethod
     async def add_item(db: AsyncSession, user_id: int, product_id: int, quantity: int):

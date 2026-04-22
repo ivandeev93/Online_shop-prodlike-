@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.models.users import User as UserModel
 from app.config import SECRET_KEY, ALGORITHM
-from app.db_depends import get_async_db
+from app.core.dependencies import get_async_db
 
 
 # Создаём контекст для хеширования с использованием bcrypt
