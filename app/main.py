@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routers import categories, posts
+from app.api.routers import cart, categories, orders, products, reviews, users
 from app.core.database import create_db_and_tables
 
 
@@ -21,8 +21,12 @@ app = FastAPI(
 )
 
 # Подключение обработчиков маршрутов
+app.include_router(cart.router)
 app.include_router(categories.router)
-app.include_router(posts.router)
+app.include_router(orders.router)
+app.include_router(products.router)
+app.include_router(reviews.router)
+app.include_router(users.router)
 
 
 @app.get("/")
