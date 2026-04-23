@@ -31,5 +31,5 @@ class CategoryRepository:
         return db_category
 
     @staticmethod
-    async def update(db: AsyncSession, category_id: int):
+    async def update(db: AsyncSession, name: str):
         pass

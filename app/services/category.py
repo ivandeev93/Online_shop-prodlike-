@@ -31,8 +31,11 @@ class CategoryService:
         return await CategoryRepository.create(db, name=category.name)
 
     @staticmethod
-    async def update_category():
-        pass
+    async def update_category(db: AsyncSession, category: CategoryCreate):
+        existing_category = await CategoryRepository.get_by_name(db, category.name)
+        if not existing_category:
+            return None
+        return await CategoryRepository.update(db, name=category.name)
 
     @staticmethod
     async def delete_category():
