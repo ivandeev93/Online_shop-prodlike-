@@ -1,45 +1,52 @@
-# CategoryService
 from collections.abc import Sequence
 from fastapi import HTTPException, status, Depends
 
-from app.auth import get_current_user
-
-from app.models.categories import Category
 from app.repositories.category import CategoryRepository
 
-from app.schemas import Category as CategorySchema, CategoryCreate
+from app.models.categories import Category
+from app.schemas import CategoryCreate
 
 
 class CategoryService:
-# ДОБАВИТЬ SELF
-    @staticmethod
-    async def get_all_categories(skip: int = 0, limit: int = 100) -> Sequence[Category]:
-        return await CategoryRepository.get_all(skip=skip, limit=limit)
 
-    @staticmethod
-    async def get_category_by_id(category_id: int) -> Category | None:
-        return await CategoryRepository.get_by_id(category_id)
+    def __init__(self, category_repo: CategoryRepository):
+        self.category_repo = category_repo
 
-    @staticmethod
-    async def create_category(category: CategoryCreate) -> Category | None:
-        existing_category = await CategoryRepository.get_by_name(category.name)
+    async def get_all_categories(self, skip: int = 0, limit: int = 100) -> Sequence[Category]:
+        return await self.category_repo.get_all(skip=skip, limit=limit)
+
+    async def get_category_by_id(self, category_id: int) -> Category | None:
+        return await self.category_repo.get_by_id(category_id)
+
+    async def create_category(self, category: CategoryCreate) -> Category | None:
+        existing_category = await self.category_repo.get_by_name(category.name)
         if existing_category:
             return None  # Возвращаем None, если категория с таким именем уже есть
-        return await CategoryRepository.create(category)
+        return await self.category_repo.create(category)
 
-    @staticmethod
-    async def update_category(category: CategoryCreate, category_id):
-        existing_category = await CategoryRepository.get_by_id(category.id)
+    async def update_category(self, category: CategoryCreate, category_id: int):
+        existing_category = await self.category_repo.get_by_id(category_id)
         if not existing_category:
             return None
-        return await CategoryRepository.update(category, category_id=category_id)
+        category_with_same_name = await self.category_repo.get_by_name(category.name)
 
-    @staticmethod
-    async def delete_category(category_id):
-        existing_category = await CategoryRepository.get_by_id(category_id)
+        if category_with_same_name and category_with_same_name.id != category_id:
+            return None
+
+        updated = await self.category_repo.update(category_id, category)
+
+        if updated is None:
+            return None
+
+        return updated
+
+
+    async def delete_category(self, category_id: int):
+        existing_category = await self.category_repo.get_by_id(category_id)
         if not existing_category:
             return None
-        return await CategoryRepository.delete(category_id)
+
+        return await self.category_repo.delete(category_id)
 
 
 

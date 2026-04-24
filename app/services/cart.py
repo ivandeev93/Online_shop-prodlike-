@@ -18,6 +18,8 @@ from app.schemas import (
 )
 
 class CartService:
+    def __init__(self, cart_repo: CartRepository):
+        self.
 
     @staticmethod
     async def _ensure_product_available(db: AsyncSession, product_id: int) -> None:

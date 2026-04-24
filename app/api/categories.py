@@ -12,7 +12,7 @@ router = APIRouter(
     tags=["categories"],
 )
 
-
+# ПЕРЕДЕЛАТЬ ИСКЛЮЧЕНИЯ С ОТДЕЛЬНЫМИ КЛАССАМИ ИСКЛЮЧЕНИЙ В СЕРВИСНОМ СЛОЕ
 @router.get("/", response_model=list[Category])
 async def get_all_categories(
         skip: int = 0,
@@ -37,6 +37,7 @@ async def create_category(
     db_category = await category_service.create_category(category=category)
     if db_category is None:
         raise HTTPException(status_code=400, detail="Category with this name already exists")
+
     return db_category
 
 
@@ -48,6 +49,9 @@ async def update_category(category_id: int, category: CategoryCreate,
     Обновляет категорию по её ID.
     """
     db_category = await category_service.update_category(category, category_id)
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
     return db_category
 
 
@@ -57,4 +61,7 @@ async def delete_category(category_id: int, category_service: CategoryService = 
     Выполняет мягкое удаление категории по её ID, устанавливая is_active = False.
     """
     db_category = await category_service.delete_category(category_id)
+    if db_category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+
     return db_category

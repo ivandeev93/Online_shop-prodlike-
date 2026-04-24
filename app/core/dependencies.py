@@ -2,7 +2,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
-from app.repositories.cart import CartItemRepository
+from app.repositories.cart import CartRepository
 from app.repositories.category import CategoryRepository
 from app.repositories.order import OrderRepository
 from app.repositories.product import ProductRepository
@@ -25,8 +25,8 @@ async def get_async_db():
 
 # Зависимости для получения экземпляров репозиториев
 # Сущности у которых есть внешний ключ проверяют существование связанных
-def get_cart_repository(db: AsyncSession = Depends(get_async_db)) -> CartItemRepository:
-    return CartItemRepository(db=db)
+def get_cart_repository(db: AsyncSession = Depends(get_async_db)) -> CartRepository:
+    return CartRepository(db=db)
 
 
 def get_category_repository(db: AsyncSession = Depends(get_async_db)) -> CategoryRepository:
@@ -50,25 +50,25 @@ def get_user_repository(db: AsyncSession = Depends(get_async_db)) -> UserReposit
 
 
 # Зависимости для получения экземпляров сервисов
-def get_cart_service(db: AsyncSession = Depends(get_async_db)) -> CartService:
-    return CartService(cart_repo=CartItemRepository(db=db))
+def get_cart_service(repo: CartRepository = Depends(get_cart_repository)) -> CartService:
+    return CartService(cart_repo=repo)
 
 
-def get_category_service(db: AsyncSession = Depends(get_async_db)) -> CategoryService:
-    return CategoryService(category_repo=CategoryRepository(db=db))
+def get_category_service(repo: CategoryRepository = Depends(get_category_repository)) -> CategoryService:
+    return CategoryService(category_repo=repo)
 
 
-def get_order_service(db: AsyncSession = Depends(get_async_db)) -> OrderService:
-    return OrderService(order_repo=OrderRepository(db=db))
+def get_order_service(repo: OrderRepository = Depends(get_order_repository)) -> OrderService:
+    return OrderService(order_repo=repo)
 
 
-def get_product_service(db: AsyncSession = Depends(get_async_db)) -> ProductService:
-    return ProductService(product_repo=ProductRepository(db=db))
+def get_product_service(repo: ProductRepository = Depends(get_product_repository)) -> ProductService:
+    return ProductService(product_repo=repo)
 
 
-def get_review_repository(db: AsyncSession = Depends(get_async_db)) -> ReviewService:
-    return ReviewService(review_repo=ReviewRepository(db=db))
+def get_review_repository(repo: ReviewRepository = Depends(get_review_repository)) -> ReviewService:
+    return ReviewService(review_repo=repo)
 
 
-def get_user_repository(db: AsyncSession = Depends(get_async_db)) -> UserService:
-    return UserService(user_repo=UserRepository(db=db))
+def get_user_repository(repo: UserRepository = Depends(get_user_repository)) -> UserService:
+    return UserService(user_repo=repo)
