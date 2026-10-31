@@ -9,9 +9,9 @@ from app.models.products import Product as ProductModel
 class CartRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
-# Self добавить
-    async def get_product(db: AsyncSession, product_id: int):
-        result = await db.scalars(
+
+    async def get_product(self, product_id: int):
+        result = await self.db.scalars(
             select(ProductModel).where(
                 ProductModel.id == product_id,
                 ProductModel.is_active == True,
@@ -19,8 +19,8 @@ class CartRepository:
         )
         return result.first()
 
-    async def get_cart_item(db: AsyncSession, user_id: int, product_id: int) -> CartItemModel | None:
-        result = await db.scalars(
+    async def get_cart_item(self, user_id: int, product_id: int) -> CartItemModel | None:
+        result = await self.db.scalars(
             select(CartItemModel)
             .options(selectinload(CartItemModel.product))
             .where(
@@ -30,8 +30,8 @@ class CartRepository:
         )
         return result.first()
 
-    async def get_cart_items(db: AsyncSession, user_id: int):
-        result = await db.scalars(
+    async def get_cart_items(self, user_id: int):
+        result = await self.db.scalars(
             select(CartItemModel)
             .options(selectinload(CartItemModel.product))
             .where(CartItemModel.user_id == user_id)
@@ -39,13 +39,13 @@ class CartRepository:
         )
         return result.all()
 
-    async def add(db: AsyncSession, cart_item: CartItemModel):
-        db.add(cart_item)
+    async def add(self, cart_item: CartItemModel):
+        self.db.add(cart_item)
 
-    async def delete(db: AsyncSession, cart_item: CartItemModel):
-        await db.delete(cart_item)
+    async def delete(self, cart_item: CartItemModel):
+        await self.db.delete(cart_item)
 
-    async def clear_cart(db: AsyncSession, user_id: int):
-        await db.execute(
+    async def clear_cart(self, user_id: int):
+        await self.db.execute(
             delete(CartItemModel).where(CartItemModel.user_id == user_id)
         )
