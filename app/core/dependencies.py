@@ -66,9 +66,9 @@ def get_product_service(repo: ProductRepository = Depends(get_product_repository
     return ProductService(product_repo=repo)
 
 
-def get_review_repository(repo: ReviewRepository = Depends(get_review_repository)) -> ReviewService:
+def get_review_service(repo: ReviewRepository = Depends(get_review_repository)) -> ReviewService:
     return ReviewService(review_repo=repo)
 
 
-def get_user_repository(repo: UserRepository = Depends(get_user_repository)) -> UserService:
+def get_user_service(repo: UserRepository = Depends(get_user_repository)) -> UserService:
     return UserService(user_repo=repo)

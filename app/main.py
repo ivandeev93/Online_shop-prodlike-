@@ -1,18 +1,20 @@
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 
-from app.api.routers import cart, categories, orders, products, reviews, users
-from app.core.database import create_db_and_tables
+from app.api import cart, categories, orders, products, reviews, users
+from app.core.database import close_database_connection
+
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Приложение запускается. Создаем базу данных...")
-    await create_db_and_tables()
-    print("База данных инициализирована.")
-    yield
-    print("Приложение завершает работу.")
+    print("Приложение запускается.")
+
+    try:
+        yield
+    finally:
+        await close_database_connection()
+        print("Приложение завершает работу.")
 
 
 app = FastAPI(
