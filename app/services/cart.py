@@ -1,97 +1,192 @@
-# CartService
-
 from decimal import Decimal
-from fastapi import HTTPException, status, Depends
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user
-from app.core.dependencies import get_async_db
-
-from app.models.users import User as UserModel
-from app.models.cart_items import CartItem as CartItemModel
-from app.repositories.cart import CartRepository
-from app.schemas import (
-    Cart as CartSchema,
-    CartItem as CartItemSchema,
-    CartItemCreate,
-    CartItemUpdate
+from app.exceptions.cart import (
+    CartItemNotFoundError,
+    InsufficientStockError,
 )
+from app.exceptions.product import ProductNotFoundError
+from app.models.cart_items import CartItem
+from app.repositories.cart import CartRepository
+from app.repositories.product import ProductRepository
+from app.schemas import Cart as CartSchema
+
 
 class CartService:
-    def __init__(self, cart_repo: CartRepository):
-        self.
 
-    @staticmethod
-    async def _ensure_product_available(db: AsyncSession, product_id: int) -> None:
-        product = await CartRepository.get_product(db, product_id)
-        if not product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product not found or inactive",
-            )
+    def __init__(
+        self,
+        cart_repo: CartRepository,
+        product_repo: ProductRepository,
+        db: AsyncSession,
+    ):
+        self.cart_repo = cart_repo
+        self.product_repo = product_repo
+        self.db = db
 
-    @staticmethod
-    async def get_cart(db: AsyncSession, current_user: UserModel = Depends(get_current_user)):
-        items = await CartRepository.get_cart_items(db, current_user.id)
+    async def get_cart(self, user_id: int) -> CartSchema:
+        """
+        Получает корзину пользователя и рассчитывает её стоимость.
+        """
+        items = await self.cart_repo.get_by_user_id(user_id)
 
         total_quantity = sum(item.quantity for item in items)
-
         total_price = sum(
-            Decimal(item.quantity) *
-            (item.product.price or Decimal("0"))
-            for item in items
+            (
+                item.product.price * item.quantity
+                for item in items
+            ),
+            start=Decimal("0.00"),
         )
 
         return CartSchema(
-            user_id=current_user.id,
+            user_id=user_id,
             items=items,
             total_quantity=total_quantity,
             total_price=total_price,
         )
 
-    @staticmethod
-    async def add_item(db: AsyncSession, user_id: int, product_id: int, quantity: int):
-        await CartService._ensure_product_available(db, product_id)
+    async def add_item(
+        self,
+        user_id: int,
+        product_id: int,
+        quantity: int,
+    ) -> CartItem:
+        """
+        Добавляет товар в корзину или увеличивает его количество.
+        """
+        product = await self.product_repo.get_by_id(product_id)
 
-        cart_item = await CartRepository.get_cart_item(db, user_id, product_id)
+        if product is None:
+            raise ProductNotFoundError()
 
-        if cart_item:
-            cart_item.quantity += quantity
-        else:
-            cart_item = CartItemModel(
-                user_id=user_id,
-                product_id=product_id,
+        existing_item = await self.cart_repo.get_by_product_id(
+            user_id=user_id,
+            product_id=product_id,
+        )
+
+        current_quantity = (
+            existing_item.quantity if existing_item is not None else 0
+        )
+        new_quantity = current_quantity + quantity
+
+        if new_quantity > product.stock:
+            raise InsufficientStockError(
+                "Requested quantity exceeds available stock"
+            )
+
+        try:
+            if existing_item is not None:
+                await self.cart_repo.update_quantity(
+                    cart_item=existing_item,
+                    quantity=new_quantity,
+                )
+            else:
+                await self.cart_repo.create(
+                    user_id=user_id,
+                    product_id=product_id,
+                    quantity=quantity,
+                )
+
+            await self.db.commit()
+
+        except Exception:
+            await self.db.rollback()
+            raise
+
+        return await self._get_cart_item(user_id, product_id)
+
+    async def update_item(
+        self,
+        user_id: int,
+        product_id: int,
+        quantity: int,
+    ) -> CartItem:
+        """
+        Устанавливает новое количество товара в корзине.
+        """
+        cart_item = await self.cart_repo.get_by_product_id(
+            user_id=user_id,
+            product_id=product_id,
+        )
+
+        if cart_item is None:
+            raise CartItemNotFoundError()
+
+        product = await self.product_repo.get_by_id(product_id)
+
+        if product is None:
+            raise ProductNotFoundError()
+
+        if quantity > product.stock:
+            raise InsufficientStockError(
+                "Requested quantity exceeds available stock"
+            )
+
+        try:
+            await self.cart_repo.update_quantity(
+                cart_item=cart_item,
                 quantity=quantity,
             )
-            await CartRepository.add(db, cart_item)
+            await self.db.commit()
 
-        await db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
 
-        return await CartRepository.get_cart_item(db, user_id, product_id)
+        return await self._get_cart_item(user_id, product_id)
 
-    @staticmethod
-    async def update_item(db: AsyncSession, user_id: int, product_id: int, quantity: int):
-        await CartService._ensure_product_available(db, product_id)
+    async def remove_item(
+        self,
+        user_id: int,
+        product_id: int,
+    ) -> None:
+        """
+        Удаляет товар из корзины пользователя.
+        """
+        cart_item = await self.cart_repo.get_by_product_id(
+            user_id=user_id,
+            product_id=product_id,
+        )
 
-        cart_item = await CartRepository.get_cart_item(db, user_id, product_id)
-        if not cart_item:
-            raise HTTPException(status_code=404, detail="Cart item not found")
+        if cart_item is None:
+            raise CartItemNotFoundError()
 
-        cart_item.quantity = quantity
-        await db.commit()
+        try:
+            await self.cart_repo.delete(cart_item)
+            await self.db.commit()
 
-        return await CartRepository.get_cart_item(db, user_id, product_id)
+        except Exception:
+            await self.db.rollback()
+            raise
 
-    @staticmethod
-    async def remove_item(db: AsyncSession, user_id: int, product_id: int):
-        cart_item = await CartRepository.get_cart_item(db, user_id, product_id)
-        if not cart_item:
-            raise HTTPException(status_code=404, detail="Cart item not found")
+    async def clear_cart(self, user_id: int) -> None:
+        """
+        Удаляет все позиции из корзины пользователя.
+        """
+        try:
+            await self.cart_repo.clear(user_id)
+            await self.db.commit()
 
-        await CartRepository.delete(db, cart_item)
-        await db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
 
-    @staticmethod
-    async def clear_cart(db: AsyncSession, user_id: int):
-        await CartRepository.clear_cart(db, user_id)
-        await db.commit()
+    async def _get_cart_item(
+        self,
+        user_id: int,
+        product_id: int,
+    ) -> CartItem:
+        """
+        Получает позицию корзины вместе с данными товара.
+        """
+        cart_item = await self.cart_repo.get_by_product_id(
+            user_id=user_id,
+            product_id=product_id,
+        )
+
+        if cart_item is None:
+            raise CartItemNotFoundError()
+
+        return cart_item

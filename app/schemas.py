@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict, EmailStr, field_validator
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional, Annotated
@@ -35,7 +35,7 @@ class ProductCreate(BaseModel):
     """
     name: str = Field(min_length=3, max_length=100,
                       description="Название товара (3-100 символов)")
-    description: str | None = Field(None, max_length=500,
+    description: str | None = Field(default=None, max_length=500,
                                        description="Описание товара (до 500 символов)")
     price: Decimal = Field(gt=0, description="Цена товара (больше 0)", decimal_places=2)
     stock: int = Field(ge=0, description="Количество товара на складе (0 или больше)")
@@ -48,7 +48,7 @@ class ProductCreate(BaseModel):
             price: Annotated[Decimal, Form(...)],
             stock: Annotated[int, Form(...)],
             category_id: Annotated[int, Form(...)],
-            description: Annotated[Optional[str], Form()] = None,
+            description: Annotated[Optional[str], Form()] = None
     ) -> "ProductCreate":
         return cls(
             name=name,
@@ -57,6 +57,32 @@ class ProductCreate(BaseModel):
             stock=stock,
             category_id=category_id,
         )
+
+
+class ProductUpdate(BaseModel):
+    """
+    Схема для частичного обновления товара.
+    """
+    name: str | None = Field(default=None, min_length=3,
+                             max_length=100, description="Название товара")
+    description: str | None = Field(default=None, max_length=500, description="Описание товара")
+    price: Decimal | None = Field(default=None, gt=0, decimal_places=2, description="Цена товара")
+    stock: int | None = Field(default=None, ge=0, description="Количество товара на складе")
+    category_id: int | None = Field(default=None, gt=0, description="ID категории")
+
+    @field_validator(
+        "name",
+        "price",
+        "stock",
+        "category_id",
+        mode="before",
+    )
+
+    def prevent_null_values(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null")
+
+        return value
 
 
 class Product(BaseModel):
@@ -78,18 +104,15 @@ class Product(BaseModel):
 
 class UserCreate(BaseModel):
     """
-    Модель для создания и обновления товара.
-    Используется в POST и PUT запросах.
+    Модель для регистрации пользователя.
     """
     email: EmailStr = Field(description="Email пользователя")
     password: str = Field(min_length=8, description="Пароль (минимум 8 символов)")
-    role: str = Field(default="buyer", pattern="^(buyer|seller|admin)$", description="Роль: 'buyer', 'seller' или 'admin'")
 
 
 class User(BaseModel):
     """
-    Модель для ответа с данными товара.
-    Используется в GET-запросах.
+    Модель для ответа пользователя.
     """
     id: int = Field(description="Уникальный идентификатор пользователя")
     email: EmailStr = Field(description="Email пользователя")
@@ -97,6 +120,22 @@ class User(BaseModel):
     role: str = Field(description="Роль пользователя")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class Token(BaseModel):
+    """
+    Модель для создания токена доступа и рефреш токена.
+    """
+    access_token: str = Field(description="Токен доступа")
+    refresh_token: str = Field(description="Рефреш токен")
+    token_type: str = "bearer"
+
+
+class RefreshTokenRequest(BaseModel):
+    """
+    Модель для возврата рефреш токена.
+    """
+    refresh_token: str
 
 
 class ReviewCreate(BaseModel):

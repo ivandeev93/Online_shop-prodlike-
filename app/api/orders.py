@@ -1,143 +1,57 @@
-from decimal import Decimal
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from fastapi import APIRouter, Depends, Query, status
 
 from app.auth import get_current_user
-from app.db_depends import get_async_db
-from app.models.cart_items import CartItem as CartItemModel
-from app.models.orders import Order as OrderModel, OrderItem as OrderItemModel
-from app.models.users import User as UserModel
+from app.core.dependencies import get_order_service
+from app.models.users import User
 from app.schemas import Order as OrderSchema, OrderList
+from app.services.order import OrderService
 
-router = APIRouter(
-    prefix="/orders",
-    tags=["orders"],
+
+router = APIRouter(prefix="/orders", tags=["Orders"])
+
+
+@router.post(
+    "/checkout",
+    response_model=OrderSchema,
+    status_code=status.HTTP_201_CREATED,
 )
-
-
-async def _load_order_with_items(db: AsyncSession, order_id: int) -> OrderModel | None:
-    result = await db.scalars(
-        select(OrderModel)
-        .options(
-            selectinload(OrderModel.items).selectinload(OrderItemModel.product),
-        )
-        .where(OrderModel.id == order_id)
-    )
-    return result.first()
-
-
-@router.post("/checkout", response_model=OrderSchema, status_code=status.HTTP_201_CREATED)
 async def checkout_order(
-    db: AsyncSession = Depends(get_async_db),
-    current_user: UserModel = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service),
 ):
     """
-    Создаёт заказ на основе текущей корзины пользователя.
-    Сохраняет позиции заказа, вычитает остатки и очищает корзину.
+    Оформляет заказ на основе корзины текущего пользователя.
     """
-    cart_result = await db.scalars(
-        select(CartItemModel)
-        .options(selectinload(CartItemModel.product))
-        .where(CartItemModel.user_id == current_user.id)
-        .order_by(CartItemModel.id)
-    )
-    cart_items = cart_result.all()
-
-    if not cart_items:                  # Проверка, что корзина не пуста
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cart is empty")
-
-    order = OrderModel(user_id=current_user.id)
-    total_amount = Decimal("0")
-
-    for cart_item in cart_items:
-        product = cart_item.product
-        if not product or not product.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Product {cart_item.product_id} is unavailable",
-            )
-        if product.stock < cart_item.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Not enough stock for product {product.name}",
-            )
-        # Фиксируем цену и считаем сумму заказа
-        unit_price = product.price
-        if unit_price is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Product {product.name} has no price set",
-            )
-        total_price = unit_price * cart_item.quantity
-        total_amount += total_price
-
-        # Создаём позицию заказа и уменьшаем остатки
-        order_item = OrderItemModel(
-            product_id=cart_item.product_id,
-            quantity=cart_item.quantity,
-            unit_price=unit_price,
-            total_price=total_price,
-        )
-        order.items.append(order_item)
-
-        product.stock -= cart_item.quantity
-
-    # Сохраняем заказ и очищаем корзину
-    order.total_amount = total_amount
-    db.add(order)
-
-    await db.execute(delete(CartItemModel).where(CartItemModel.user_id == current_user.id))
-    await db.commit()
-
-    # Перезагружаем заказ с полными данными
-    created_order = await _load_order_with_items(db, order.id)
-    if not created_order:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to load created order",
-        )
-    return created_order
+    return await order_service.checkout(user_id=current_user.id)
 
 
 @router.get("/", response_model=OrderList)
 async def list_orders(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    db: AsyncSession = Depends(get_async_db),
-    current_user: UserModel = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service),
 ):
     """
-    Возвращает заказы текущего пользователя с простой пагинацией.
+    Возвращает заказы текущего пользователя с пагинацией.
     """
-    total = await db.scalar(
-        select(func.count(OrderModel.id)).where(OrderModel.user_id == current_user.id)
+    return await order_service.get_user_orders(
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
     )
-    result = await db.scalars(
-        select(OrderModel)
-        .options(selectinload(OrderModel.items).selectinload(OrderItemModel.product))
-        .where(OrderModel.user_id == current_user.id)
-        .order_by(OrderModel.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    orders = result.all()
-
-    return OrderList(items=orders, total=total or 0, page=page, page_size=page_size)
 
 
 @router.get("/{order_id}", response_model=OrderSchema)
 async def get_order(
     order_id: int,
-    db: AsyncSession = Depends(get_async_db),
-    current_user: UserModel = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service),
 ):
     """
-    Возвращает детальную информацию по заказу, если он принадлежит пользователю.
+    Возвращает подробную информацию о заказе.
     """
-    order = await _load_order_with_items(db, order_id)
-    if not order or order.user_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    return order
+    return await order_service.get_order(
+        order_id=order_id,
+        user_id=current_user.id,
+    )

@@ -2,50 +2,114 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.cart_items import CartItem as CartItemModel
-from app.models.products import Product as ProductModel
+from app.models.cart_items import CartItem
 
 
 class CartRepository:
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_product(self, product_id: int):
+    async def get_by_user_id(self, user_id: int) -> list[CartItem]:
+        """
+        Получает все позиции корзины пользователя.
+        """
         result = await self.db.scalars(
-            select(ProductModel).where(
-                ProductModel.id == product_id,
-                ProductModel.is_active == True,
-            )
+            select(CartItem)
+            .options(selectinload(CartItem.product))
+            .where(CartItem.user_id == user_id)
         )
-        return result.first()
 
-    async def get_cart_item(self, user_id: int, product_id: int) -> CartItemModel | None:
-        result = await self.db.scalars(
-            select(CartItemModel)
-            .options(selectinload(CartItemModel.product))
+        return list(result.all())
+
+    async def get_by_id(self, item_id: int, user_id: int) -> CartItem | None:
+        """
+        Получает позицию корзины по ID с проверкой владельца.
+        """
+        result = await self.db.scalar(
+            select(CartItem)
+            .options(selectinload(CartItem.product))
             .where(
-                CartItemModel.user_id == user_id,
-                CartItemModel.product_id == product_id,
+                CartItem.id == item_id,
+                CartItem.user_id == user_id,
             )
         )
-        return result.first()
 
-    async def get_cart_items(self, user_id: int):
-        result = await self.db.scalars(
-            select(CartItemModel)
-            .options(selectinload(CartItemModel.product))
-            .where(CartItemModel.user_id == user_id)
-            .order_by(CartItemModel.id)
+        return result
+
+    async def get_by_product_id(self, user_id: int, product_id: int) -> CartItem | None:
+        """
+        Находит позицию корзины по ID пользователя и товара.
+        """
+        result = await self.db.scalar(
+            select(CartItem)
+            .options(selectinload(CartItem.product))
+            .where(
+                CartItem.user_id == user_id,
+                CartItem.product_id == product_id,
+            )
         )
-        return result.all()
 
-    async def add(self, cart_item: CartItemModel):
+        return result
+
+    async def create(
+        self, user_id: int, product_id: int, quantity: int,
+    ) -> CartItem:
+        """
+        Добавляет новую позицию в корзину.
+        """
+        cart_item = CartItem(
+            user_id=user_id,
+            product_id=product_id,
+            quantity=quantity,
+        )
+
         self.db.add(cart_item)
+        await self.db.flush()
 
-    async def delete(self, cart_item: CartItemModel):
+        return cart_item
+
+    async def update_quantity(
+        self, cart_item: CartItem, quantity: int,
+    ) -> CartItem:
+        """
+        Обновляет количество товара в корзине.
+        """
+        cart_item.quantity = quantity
+
+        await self.db.flush()
+
+        return cart_item
+
+    async def delete(self, cart_item: CartItem) -> None:
+        """
+        Удаляет отдельную позицию из корзины.
+        """
         await self.db.delete(cart_item)
+        await self.db.flush()
 
-    async def clear_cart(self, user_id: int):
+    async def clear(self, user_id: int) -> None:
+        """
+        Удаляет все позиции корзины пользователя.
+        """
         await self.db.execute(
-            delete(CartItemModel).where(CartItemModel.user_id == user_id)
+            delete(CartItem).where(CartItem.user_id == user_id)
         )
+
+        await self.db.flush()
+
+    async def get_by_user_id_for_update(
+        self,
+        user_id: int,
+    ) -> list[CartItem]:
+        """
+        Получает позиции корзины и блокирует их до завершения транзакции.
+        """
+        result = await self.db.scalars(
+            select(CartItem)
+            .where(CartItem.user_id == user_id)
+            .order_by(CartItem.id)
+            .with_for_update()
+        )
+
+        return list(result.all())
