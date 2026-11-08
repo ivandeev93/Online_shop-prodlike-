@@ -5,7 +5,6 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.categories import Category
 from app.models.products import Product
 
 

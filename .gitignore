@@ -1,6 +1,30 @@
-.idea/
-.venv/
+# Переменные окружения
 .env
+.env.*
+
+# Исключение шаблона переменных окружения
+!.env.example
+
+# Виртуальное окружение
+.venv/
+venv/
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Тестирование и инструменты
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Базы данных
 *.db
 *.sqlite3
+
+# IDE
+.idea/
+.vscode/

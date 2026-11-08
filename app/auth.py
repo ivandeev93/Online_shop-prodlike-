@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -17,56 +18,63 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/token")
 
 
-def create_access_token(data: dict) -> str:
+def _create_token(
+    data: dict[str, Any],
+    expires_delta: timedelta,
+    token_type: str,
+) -> str:
+    """
+    Создаёт JWT с указанным сроком действия и типом.
+    """
+    subject = data.get("sub")
+
+    if not isinstance(subject, str) or not subject.strip():
+        raise ValueError("JWT subject must be a non-empty string")
+
+    to_encode = data.copy()
+
+    expire = datetime.now(timezone.utc) + expires_delta
+
+    to_encode.update({
+        "exp": expire,
+        "token_type": token_type,
+    })
+
+    return jwt.encode(
+        to_encode,
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
+
+
+def create_access_token(data: dict[str, Any]) -> str:
     """
     Создаёт JWT доступа.
     """
-    to_encode = data.copy()
-
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
-    )
-
-    to_encode.update({
-        "exp": expire,
-        "token_type": "access",
-    })
-
-    return jwt.encode(
-        to_encode,
-        settings.secret_key,
-        algorithm=settings.algorithm,
+    return _create_token(
+        data=data,
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        token_type="access",
     )
 
 
-def create_refresh_token(data: dict) -> str:
+def create_refresh_token(data: dict[str, Any]) -> str:
     """
-    Создаёт рефреш токен.
+    Создаёт JWT для обновления токена доступа.
     """
-    to_encode = data.copy()
-
-    expire = datetime.now(timezone.utc) + timedelta(
-        days=REFRESH_TOKEN_EXPIRE_DAYS
-    )
-
-    to_encode.update({
-        "exp": expire,
-        "token_type": "refresh",
-    })
-
-    return jwt.encode(
-        to_encode,
-        settings.secret_key,
-        algorithm=settings.algorithm,
+    return _create_token(
+        data=data,
+        expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        token_type="refresh",
     )
 
 
 def decode_token(
     token: str,
     expected_type: str,
-) -> dict:
+) -> dict[str, Any]:
     """
-    Декодирует JWT и проверяет его тип.
+    Декодирует JWT и проверяет его тип и обязательные поля.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -79,12 +87,17 @@ def decode_token(
             token,
             settings.secret_key,
             algorithms=[settings.algorithm],
+            options={
+                "require": ["exp", "sub", "token_type"],
+            },
         )
 
         if payload.get("token_type") != expected_type:
             raise credentials_exception
 
-        if not payload.get("sub"):
+        subject = payload.get("sub")
+
+        if not isinstance(subject, str) or not subject.strip():
             raise credentials_exception
 
         return payload

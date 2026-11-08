@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from app.core.media import MEDIA_DIR
 
 from app.api import cart, categories, orders, products, reviews, users
 from app.core.database import close_database_connection
@@ -68,6 +70,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Обработка медиа файлов
+app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 # Подключение маршрутов
 app.include_router(cart.router)

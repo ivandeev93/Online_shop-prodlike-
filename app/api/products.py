@@ -11,7 +11,7 @@ from fastapi import (
     status,
 )
 
-from app.auth import get_current_seller
+from app.auth import get_current_seller, get_current_user
 from app.core.dependencies import (
     get_category_service,
     get_product_service,
@@ -160,17 +160,13 @@ async def create_product(
                 )
         raise
 
-    finally:
-        if image is not None:
-            await image.close()
-
 
 @router.patch("/{product_id}", response_model=ProductSchema)
 async def update_product(
     product_id: int,
     product: ProductUpdate,
     product_service: ProductService = Depends(get_product_service),
-    current_user: UserModel = Depends(get_current_seller),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Обновляет товар, если он принадлежит текущему продавцу (только для 'seller').
@@ -189,7 +185,7 @@ async def update_product_image(
     product_id: int,
     image: UploadFile = File(...),
     product_service: ProductService = Depends(get_product_service),
-    current_user: UserModel = Depends(get_current_seller),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Обновляет изображение товара, если он принадлежит текущему продавцу (только для 'seller').
@@ -219,9 +215,6 @@ async def update_product_image(
                 )
         raise
 
-    finally:
-        await image.close()
-
     # Старое изображение удаляем только после успешного commit.
     if old_image_url:
         try:
@@ -239,7 +232,7 @@ async def update_product_image(
 async def delete_product(
     product_id: int,
     product_service: ProductService = Depends(get_product_service),
-    current_user: UserModel = Depends(get_current_seller),
+    current_user: UserModel = Depends(get_current_user),
 ):
     """
     Выполняет мягкое удаление товара, если он принадлежит текущему продавцу (только для 'seller').
