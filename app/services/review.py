@@ -2,6 +2,8 @@ from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.exc import IntegrityError
+
 from app.exceptions.product import ProductNotFoundError
 from app.exceptions.review import (
     ReviewAlreadyExistsError,
@@ -101,6 +103,10 @@ class ReviewService:
             await self.db.refresh(db_review)
 
             return db_review
+
+        except IntegrityError as exc:
+            await self.db.rollback()
+            raise ReviewAlreadyExistsError() from exc
 
         except Exception:
             await self.db.rollback()

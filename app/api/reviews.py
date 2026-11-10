@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, status
 
-from app.auth import get_current_admin, get_current_buyer
+from app.auth import get_current_admin, get_current_buyer, get_current_user
 from app.core.dependencies import get_review_service
 from app.models.users import User
 from app.schemas import Review as ReviewSchema, ReviewCreate
@@ -40,7 +40,7 @@ async def get_reviews_by_product(
 
 
 @router.post(
-    "/reviews/",
+    "/",
     response_model=ReviewSchema,
     status_code=status.HTTP_201_CREATED,
 )
@@ -58,10 +58,10 @@ async def create_review(
     )
 
 
-@router.delete("/reviews/{review_id}", status_code=status.HTTP_200_OK)
+@router.delete("/{review_id}", status_code=status.HTTP_200_OK)
 async def delete_review(
     review_id: int,
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(get_current_user),
     review_service: ReviewService = Depends(get_review_service),
 ):
     """

@@ -1,5 +1,7 @@
-from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from app.exceptions.user import (
     UnauthorizedUserError,
     UserAlreadyExistsError,
@@ -22,7 +24,9 @@ class UserService:
         self.db = db
 
     async def register_user(self, user: UserCreate) -> User:
-        # Проверяем, зарегистрирован ли пользователь с таким email
+        """
+        Регистрирует нового пользователя.
+        """
         registered_user = await self.user_repo.get_by_email(user.email)
 
         if registered_user:
@@ -31,10 +35,12 @@ class UserService:
             )
 
         try:
-            # Хешируем пароль перед сохранением
-            hashed_password = hash_password(user.password)
+            # Хешируем пароль в отдельном потоке, не блокируя event loop.
+            hashed_password = await asyncio.to_thread(
+                hash_password,
+                user.password,
+            )
 
-            # Создаём пользователя
             new_user = await self.user_repo.create(
                 email=user.email,
                 hashed_password=hashed_password,
@@ -43,6 +49,13 @@ class UserService:
             await self.db.commit()
 
             return new_user
+
+        except IntegrityError as exc:
+            await self.db.rollback()
+
+            raise UserAlreadyExistsError(
+                "User with this email already registered"
+            ) from exc
 
         except Exception:
             await self.db.rollback()
@@ -53,21 +66,30 @@ class UserService:
         email: str,
         plain_password: str,
     ) -> User:
-        # Ищем пользователя по email
+        """
+        Проверяет учетные данные пользователя.
+        """
         user = await self.user_repo.get_by_email(email)
 
-        # Проверяем существование, активность и правильность пароля
-        if (
-            user is None
-            or not user.is_active
-            or not verify_password(plain_password, user.hashed_password)
-        ):
+        if user is None or not user.is_active:
+            raise UnauthorizedUserError("Incorrect email or password")
+
+        # Проверяем пароль в отдельном потоке.
+        password_is_valid = await asyncio.to_thread(
+            verify_password,
+            plain_password,
+            user.hashed_password,
+        )
+
+        if not password_is_valid:
             raise UnauthorizedUserError("Incorrect email or password")
 
         return user
 
     async def get_user_by_id(self, user_id: int) -> User:
-
+        """
+        Возвращает пользователя по ID.
+        """
         result = await self.user_repo.get_by_id(user_id)
 
         if result is None:
@@ -78,7 +100,9 @@ class UserService:
         return result
 
     async def get_user_by_email(self, email: str) -> User:
-
+        """
+        Возвращает пользователя по email.
+        """
         result = await self.user_repo.get_by_email(email)
 
         if result is None:

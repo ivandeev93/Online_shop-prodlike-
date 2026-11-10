@@ -13,7 +13,9 @@ class UserRepository:
             self,
             email: str,
     ) -> User | None:
-        # Получение пользователя по email
+        """
+        Возвращает пользователя по email.
+        """
         result = await self.db.scalar(select(User).where(User.email == email))
 
         return result
@@ -22,7 +24,9 @@ class UserRepository:
             self,
             user_id: int,
     ) -> User | None:
-        # Получение пользователя по ID
+        """
+        Возвращает пользователя по ID.
+        """
         result = await self.db.scalar(select(User).where(User.id == user_id))
 
         return result
@@ -33,7 +37,9 @@ class UserRepository:
             hashed_password: str,
             role: str = "buyer",
     ) -> User:
-        # Создание нового пользователя
+        """
+        Создаёт нового пользователя.
+        """
         db_user = User(
             email=email,
             hashed_password=hashed_password,

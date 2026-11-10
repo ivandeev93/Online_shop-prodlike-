@@ -107,6 +107,7 @@ class CartRepository:
         """
         result = await self.db.scalars(
             select(CartItem)
+            .options(selectinload(CartItem.product))
             .where(CartItem.user_id == user_id)
             .order_by(CartItem.id)
             .with_for_update()

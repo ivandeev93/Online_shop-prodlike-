@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, Path
 
 from app.auth import get_current_user
 from app.core.dependencies import get_order_service
@@ -44,7 +44,7 @@ async def list_orders(
 
 @router.get("/{order_id}", response_model=OrderSchema)
 async def get_order(
-    order_id: int,
+    order_id: int = Path(ge=1),
     current_user: User = Depends(get_current_user),
     order_service: OrderService = Depends(get_order_service),
 ):

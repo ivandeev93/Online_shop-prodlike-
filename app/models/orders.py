@@ -51,7 +51,7 @@ class OrderItem(Base):
             name="ck_order_items_quantity_positive",
         ),
         CheckConstraint(
-            "unit_price >= 0",         # Возможность подарочных товаров
+            "unit_price >= 0",
             name="ck_order_items_unit_price_non_negative",
         ),
         UniqueConstraint(

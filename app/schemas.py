@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, EmailStr, field_validator
+from pydantic import computed_field
 from decimal import Decimal
 from datetime import datetime
 from typing import Optional, Annotated
@@ -14,6 +15,16 @@ class CategoryCreate(BaseModel):
     """
     name: str = Field(min_length=3, max_length=50,
                       description="Название категории (3-50 символов)")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        value = value.strip()
+
+        if len(value) < 3:
+            raise ValueError("Category name must contain at least 3 characters")
+
+        return value
 
 
 class Category(BaseModel):
@@ -39,7 +50,7 @@ class ProductCreate(BaseModel):
                                        description="Описание товара (до 500 символов)")
     price: Decimal = Field(gt=0, description="Цена товара (больше 0)", decimal_places=2)
     stock: int = Field(ge=0, description="Количество товара на складе (0 или больше)")
-    category_id: int = Field(description="ID категории, к которой относится товар")
+    category_id: int = Field(gt=0, description="ID категории, к которой относится товар")
 
     @classmethod
     def as_form(
@@ -48,7 +59,7 @@ class ProductCreate(BaseModel):
             price: Annotated[Decimal, Form(...)],
             stock: Annotated[int, Form(...)],
             category_id: Annotated[int, Form(...)],
-            description: Annotated[Optional[str], Form()] = None
+            description: Annotated[Optional[str], Form()] = None,
     ) -> "ProductCreate":
         return cls(
             name=name,
@@ -77,7 +88,7 @@ class ProductUpdate(BaseModel):
         "category_id",
         mode="before",
     )
-
+    @classmethod
     def prevent_null_values(cls, value):
         if value is None:
             raise ValueError("This field cannot be null")
@@ -93,11 +104,12 @@ class Product(BaseModel):
     id: int = Field(description="Уникальный идентификатор товара")
     name: str = Field(description="Название товара")
     description: str | None = Field(None, description="Описание товара")
-    price: Decimal = Field(description="Цена товара в рублях", gt=0, decimal_places=2)
+    price: Decimal = Field(description="Цена товара", gt=0, decimal_places=2)
     image_url: str | None = Field(None, description="URL изображения товара")
     stock: int = Field(description="Количество товара на складе")
     category_id: int = Field(description="ID категории")
     is_active: bool = Field(description="Активность товара")
+    rating: Decimal = Field(ge=0, le=5, description="Средний рейтинг товара")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -107,7 +119,21 @@ class UserCreate(BaseModel):
     Модель для регистрации пользователя.
     """
     email: EmailStr = Field(description="Email пользователя")
-    password: str = Field(min_length=8, description="Пароль (минимум 8 символов)")
+    password: str = Field(
+        min_length=8,
+        description="Пароль (минимум 8 символов, максимум 72 байта в UTF-8)",
+    )
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_length(cls, value: str) -> str:
+        """
+        Проверяет максимальную длину пароля для bcrypt.
+        """
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must not exceed 72 bytes in UTF-8")
+
+        return value
 
 
 class User(BaseModel):
@@ -141,11 +167,11 @@ class RefreshTokenRequest(BaseModel):
 class ReviewCreate(BaseModel):
     """
     Модель для создания и обновления отзыва.
-    Используется в POST и PUT запросах
+    Используется в POST запросах
     """
-    product_id: int = Field(description="Уникальный идентификатор товара")
-    comment: str | None = Field(None, description="Текст отзыва")
-    grade: int = Field(gt=0, le=5, description="Оценка товара")
+    product_id: int = Field(gt=0, description="Уникальный идентификатор товара")
+    comment: str | None = Field(default=None, max_length=2000, description="Текст отзыва")
+    grade: int = Field(ge=1, le=5, description="Оценка товара от 1 до 5")
 
 
 class Review(BaseModel):
@@ -157,8 +183,8 @@ class Review(BaseModel):
     user_id: int = Field(description="Уникальный идентификатор пользователя")
     product_id: int = Field(description="Уникальный идентификатор товара")
     comment: str | None = Field(None, description="Текст отзыва")
-    comment_date: datetime = Field(datetime.now, description="Время создания отзыва")
-    grade: int = Field(description="Оценка товара")
+    comment_date: datetime = Field(description="Время создания отзыва")
+    grade: int = Field(ge=1, le=5,description="Оценка товара от 1 до 5")
     is_active: bool = Field(description="Активность отзыва")
 
     model_config = ConfigDict(from_attributes=True)
@@ -177,12 +203,17 @@ class ProductList(BaseModel):
 
 
 class CartItemBase(BaseModel):
-    product_id: int = Field(description="ID товара")
+    """
+    Базовая модель позиции корзины.
+    """
+    product_id: int = Field(gt=0, description="ID товара")
     quantity: int = Field(ge=1, description="Количество товара")
 
 
 class CartItemCreate(CartItemBase):
-    """Модель для добавления нового товара в корзину."""
+    """
+    Модель для добавления нового товара в корзину.
+    """
     pass
 
 
@@ -201,7 +232,9 @@ class CartItem(BaseModel):
 
 
 class Cart(BaseModel):
-    """Полная информация о корзине пользователя."""
+    """
+    Полная информация о корзине пользователя.
+    """
     user_id: int = Field(..., description="ID пользователя")
     items: list[CartItem] = Field(default_factory=list, description="Содержимое корзины")
     total_quantity: int = Field(..., ge=0, description="Общее количество товаров")
@@ -211,18 +244,29 @@ class Cart(BaseModel):
 
 
 class OrderItem(BaseModel):
+    """
+    Модель позиции заказа.
+    """
     id: int = Field(..., description="ID позиции заказа")
-    product_id: int = Field(..., description="ID товара")
-    quantity: int = Field(..., ge=1, description="Количество")
-    unit_price: Decimal = Field(..., ge=0, description="Цена за единицу на момент покупки")
-    total_price: Decimal = Field(..., ge=0, description="Сумма по позиции")
+    product_id: int | None = Field(None, description="ID товара")
+    quantity: int = Field(ge=1, description="Количество")
+    unit_price: Decimal = Field(ge=0, description="Цена за единицу на момент покупки")
     product: Product | None = Field(None, description="Полная информация о товаре")
 
     model_config = ConfigDict(from_attributes=True)
 
+    @computed_field
+    @property
+    def total_price(self) -> Decimal:
+        """Рассчитывает общую стоимость позиции заказа."""
+        return self.unit_price * self.quantity
+
 
 class Order(BaseModel):
-    id: int = Field(..., description="ID заказа")
+    """
+    Модель заказа.
+    """
+    id: int = Field(description="ID заказа")
     user_id: int = Field(..., description="ID пользователя")
     status: str = Field(..., description="Текущий статус заказа")
     total_amount: Decimal = Field(..., ge=0, description="Общая стоимость")
@@ -234,7 +278,10 @@ class Order(BaseModel):
 
 
 class OrderList(BaseModel):
-    items: list[Order] = Field(..., description="Заказы на текущей странице")
+    """
+    Модель списка заказов с пагинацией.
+    """
+    items: list[Order] = Field(description="Заказы на текущей странице")
     total: int = Field(ge=0, description="Общее количество заказов")
     page: int = Field(ge=1, description="Текущая страница")
     page_size: int = Field(ge=1, description="Размер страницы")

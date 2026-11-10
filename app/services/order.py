@@ -31,7 +31,9 @@ class OrderService:
         self.db = db
 
     async def checkout(self, user_id: int) -> Order:
-        """Оформляет заказ на основе корзины пользователя."""
+        """
+        Оформляет заказ на основе корзины пользователя.
+        """
         try:
             # Блокируем позиции корзины, чтобы исключить повторное оформление.
             cart_items = await self.cart_repo.get_by_user_id_for_update(
@@ -99,9 +101,6 @@ class OrderService:
 
             # Очищаем корзину в рамках той же транзакции.
             await self.cart_repo.clear(user_id)
-
-            await self.db.commit()
-
             # Повторно получаем заказ вместе с товарами для ответа API.
             created_order = await self.order_repo.get_by_id(
                 order_id=order.id,
@@ -113,6 +112,8 @@ class OrderService:
                     "Created order could not be loaded"
                 )
 
+            await self.db.commit()
+
             return created_order
 
         except Exception:
@@ -120,12 +121,11 @@ class OrderService:
             raise
 
     async def get_user_orders(
-        self,
-        user_id: int,
-        page: int = 1,
-        page_size: int = 10,
+        self, user_id: int, page: int = 1, page_size: int = 10,
     ) -> OrderList:
-        """Получает список заказов пользователя с пагинацией."""
+        """
+        Получает список заказов пользователя с пагинацией.
+        """
         skip = (page - 1) * page_size
 
         orders, total = await self.order_repo.get_by_user_id(
@@ -141,12 +141,10 @@ class OrderService:
             page_size=page_size,
         )
 
-    async def get_order(
-        self,
-        order_id: int,
-        user_id: int,
-    ) -> Order:
-        """Получает заказ пользователя по его ID."""
+    async def get_order(self, order_id: int, user_id: int) -> Order:
+        """
+        Получает заказ пользователя по его ID.
+        """
         order = await self.order_repo.get_by_id(
             order_id=order_id,
             user_id=user_id,

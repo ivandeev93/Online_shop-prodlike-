@@ -14,12 +14,11 @@ class OrderRepository:
         self.db = db
 
     async def create(
-        self,
-        user_id: int,
-        total_amount: Decimal,
-        items: list[dict],
+        self, user_id: int, total_amount: Decimal, items: list[dict],
     ) -> Order:
-        """Создаёт заказ вместе с его позициями."""
+        """
+        Создаёт заказ вместе с его позициями.
+        """
         order = Order(
             user_id=user_id,
             total_amount=total_amount,
@@ -34,12 +33,10 @@ class OrderRepository:
 
         return order
 
-    async def get_by_id(
-        self,
-        order_id: int,
-        user_id: int,
-    ) -> Order | None:
-        """Получает заказ пользователя вместе с позициями и товарами."""
+    async def get_by_id(self, order_id: int, user_id: int) -> Order | None:
+        """
+        Получает заказ пользователя вместе с позициями и товарами.
+        """
         result = await self.db.scalar(
             select(Order)
             .options(
@@ -54,12 +51,11 @@ class OrderRepository:
         return result
 
     async def get_by_user_id(
-        self,
-        user_id: int,
-        skip: int = 0,
-        limit: int = 10,
+        self, user_id: int, skip: int = 0, limit: int = 10,
     ) -> tuple[Sequence[Order], int]:
-        """Получает заказы пользователя с пагинацией."""
+        """
+        Получает заказы пользователя с пагинацией.
+        """
         total = await self.db.scalar(
             select(func.count(Order.id))
             .where(Order.user_id == user_id)

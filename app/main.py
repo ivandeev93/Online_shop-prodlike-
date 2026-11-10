@@ -1,11 +1,12 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.core.media import MEDIA_DIR
 
 from app.api import cart, categories, orders, products, reviews, users
 from app.core.database import close_database_connection
+from app.core.media import MEDIA_DIR
 
 from app.core.exception_handlers import (
     category_not_found_handler,
@@ -54,24 +55,29 @@ from app.exceptions.review import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Приложение запускается.")
+    """
+    Управляет жизненным циклом приложения.
+    """
+    logger.info("Приложение запускается.")
 
     try:
         yield
     finally:
         await close_database_connection()
-        print("Приложение завершает работу.")
+        logger.info("Приложение завершает работу.")
 
 
-app = FastAPI(
-    title="Online Shop API",
-    lifespan=lifespan,
-)
+app = FastAPI(title="Online Shop API", lifespan=lifespan)
 
-# Обработка медиа файлов
+
+# Подключение медиафайлов
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+
 
 # Подключение маршрутов
 app.include_router(cart.router)
@@ -122,6 +128,7 @@ app.add_exception_handler(
     unauthorized_user_handler,
 )
 
+
 # Обработчики ошибок корзины
 app.add_exception_handler(
     CartItemNotFoundError,
@@ -138,15 +145,18 @@ app.add_exception_handler(
     cart_is_empty_handler,
 )
 
+
 # Обработчики ошибок заказов
 app.add_exception_handler(
     OrderNotFoundError,
     order_not_found_handler,
 )
+
 app.add_exception_handler(
     OrderProductUnavailableError,
     order_product_unavailable_handler,
 )
+
 
 # Обработчики ошибок отзывов
 app.add_exception_handler(
@@ -169,3 +179,9 @@ app.add_exception_handler(
 async def root():
     """Корневой эндпоинт."""
     return {"message": "Online Shop API"}
+
+
+@app.get("/health")
+async def health_check():
+    """Проверяет доступность приложения."""
+    return {"status": "ok"}
