@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, status
 
-from app.auth import get_current_admin, get_current_buyer, get_current_user
+from app.auth import get_current_buyer, get_current_user
 from app.core.dependencies import get_review_service
 from app.models.users import User
 from app.schemas import Review as ReviewSchema, ReviewCreate
@@ -58,14 +58,17 @@ async def create_review(
     )
 
 
-@router.delete("/{review_id}", status_code=status.HTTP_200_OK)
+@router.delete(
+    "/{review_id}",
+    status_code=status.HTTP_200_OK,
+)
 async def delete_review(
     review_id: int,
     current_user: User = Depends(get_current_user),
     review_service: ReviewService = Depends(get_review_service),
 ):
     """
-    Выполняет мягкое удаление отзыва (только для администратора).
+    Выполняет мягкое удаление отзыва его автором или администратором.
     """
     return await review_service.delete_review(
         review_id=review_id,

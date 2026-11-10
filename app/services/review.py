@@ -113,29 +113,23 @@ class ReviewService:
             raise
 
     async def delete_review(
-        self,
-        review_id: int,
-        current_user: User,
+            self,
+            review_id: int,
+            current_user: User,
     ) -> dict[str, str]:
         """
         Выполняет мягкое удаление отзыва.
         """
         try:
+            # Получаем отзыв, чтобы определить товар для блокировки.
             db_review = await self.review_repo.get_by_id(review_id)
 
             if db_review is None:
                 raise ReviewNotFoundError()
 
-            # Удалять отзыв может его автор или администратор.
-            if (
-                db_review.user_id != current_user.id
-                and current_user.role != "admin"
-            ):
-                raise ReviewPermissionDeniedError()
-
             product_id = db_review.product_id
 
-            # Блокируем товар, чтобы согласовать пересчёт рейтинга.
+            # Блокируем товар, чтобы согласовать изменение отзыва и рейтинга.
             product = await self.product_repo.get_by_id_for_update(
                 product_id
             )
@@ -143,11 +137,18 @@ class ReviewService:
             if product is None:
                 raise ProductNotFoundError()
 
-            # Повторно проверяем отзыв после получения блокировки.
+            # Повторно получаем отзыв после блокировки товара.
             db_review = await self.review_repo.get_by_id(review_id)
 
             if db_review is None:
                 raise ReviewNotFoundError()
+
+            # Проверяем права по актуальной записи.
+            if (
+                    db_review.user_id != current_user.id
+                    and current_user.role != "admin"
+            ):
+                raise ReviewPermissionDeniedError()
 
             deleted_review = await self.review_repo.delete(review_id)
 

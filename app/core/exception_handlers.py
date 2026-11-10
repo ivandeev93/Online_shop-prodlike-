@@ -17,6 +17,7 @@ from app.exceptions.user import (
 from app.exceptions.cart import (
     CartItemNotFoundError,
     InsufficientStockError,
+    InvalidCartQuantityError,
 )
 from app.exceptions.order import (
     CartIsEmptyError,
@@ -144,6 +145,19 @@ async def insufficient_stock_handler(
     """
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)},
+    )
+
+
+async def invalid_cart_quantity_handler(
+    request: Request,
+    exc: InvalidCartQuantityError,
+) -> JSONResponse:
+    """
+    Обрабатывает попытку добавить некорректное количество товара в корзину.
+    """
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": str(exc)},
     )
 

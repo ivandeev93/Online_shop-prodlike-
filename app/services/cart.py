@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.exceptions.cart import (
     CartItemNotFoundError,
     InsufficientStockError,
+    InvalidCartQuantityError,
 )
 from app.exceptions.product import ProductNotFoundError
 from app.models.cart_items import CartItem
@@ -32,6 +33,7 @@ class CartService:
         items = await self.cart_repo.get_by_user_id(user_id)
 
         total_quantity = sum(item.quantity for item in items)
+
         total_price = sum(
             (
                 item.product.price * item.quantity
@@ -56,27 +58,42 @@ class CartService:
         """
         Добавляет товар в корзину или увеличивает его количество.
         """
-        product = await self.product_repo.get_by_id(product_id)
-
-        if product is None:
-            raise ProductNotFoundError()
-
-        existing_item = await self.cart_repo.get_by_product_id(
-            user_id=user_id,
-            product_id=product_id,
-        )
-
-        current_quantity = (
-            existing_item.quantity if existing_item is not None else 0
-        )
-        new_quantity = current_quantity + quantity
-
-        if new_quantity > product.stock:
-            raise InsufficientStockError(
-                "Requested quantity exceeds available stock"
-            )
+        if quantity < 1:
+            raise InvalidCartQuantityError()
 
         try:
+            # Блокируем пользователя, чтобы сериализовать операции с его корзиной.
+            await self.cart_repo.lock_user_cart(user_id)
+
+            # Блокируем существующую позицию корзины.
+            existing_item = (
+                await self.cart_repo.get_by_product_id_for_update(
+                    user_id=user_id,
+                    product_id=product_id,
+                )
+            )
+
+            # Блокируем товар для проверки актуального остатка.
+            product = await self.product_repo.get_by_id_for_update(
+                product_id
+            )
+
+            if product is None or not product.is_active:
+                raise ProductNotFoundError()
+
+            current_quantity = (
+                existing_item.quantity
+                if existing_item is not None
+                else 0
+            )
+
+            new_quantity = current_quantity + quantity
+
+            if new_quantity > product.stock:
+                raise InsufficientStockError(
+                    "Requested quantity exceeds available stock"
+                )
+
             if existing_item is not None:
                 await self.cart_repo.update_quantity(
                     cart_item=existing_item,
@@ -89,13 +106,22 @@ class CartService:
                     quantity=quantity,
                 )
 
+            # Получаем позицию вместе с товаром до фиксации транзакции.
+            cart_item = await self.cart_repo.get_by_product_id(
+                user_id=user_id,
+                product_id=product_id,
+            )
+
+            if cart_item is None:
+                raise CartItemNotFoundError()
+
             await self.db.commit()
+
+            return cart_item
 
         except Exception:
             await self.db.rollback()
             raise
-
-        return await self._get_cart_item(user_id, product_id)
 
     async def update_item(
         self,
@@ -106,36 +132,58 @@ class CartService:
         """
         Устанавливает новое количество товара в корзине.
         """
-        cart_item = await self.cart_repo.get_by_product_id(
-            user_id=user_id,
-            product_id=product_id,
-        )
-
-        if cart_item is None:
-            raise CartItemNotFoundError()
-
-        product = await self.product_repo.get_by_id(product_id)
-
-        if product is None:
-            raise ProductNotFoundError()
-
-        if quantity > product.stock:
-            raise InsufficientStockError(
-                "Requested quantity exceeds available stock"
-            )
+        if quantity < 1:
+            raise InvalidCartQuantityError()
 
         try:
+            # Блокируем пользователя перед изменением корзины.
+            await self.cart_repo.lock_user_cart(user_id)
+
+            # Получаем и блокируем позицию корзины.
+            cart_item = (
+                await self.cart_repo.get_by_product_id_for_update(
+                    user_id=user_id,
+                    product_id=product_id,
+                )
+            )
+
+            if cart_item is None:
+                raise CartItemNotFoundError()
+
+            # Блокируем товар для проверки актуального остатка.
+            product = await self.product_repo.get_by_id_for_update(
+                product_id
+            )
+
+            if product is None or not product.is_active:
+                raise ProductNotFoundError()
+
+            if quantity > product.stock:
+                raise InsufficientStockError(
+                    "Requested quantity exceeds available stock"
+                )
+
             await self.cart_repo.update_quantity(
                 cart_item=cart_item,
                 quantity=quantity,
             )
+
+            # Получаем обновлённую позицию вместе с товаром.
+            updated_item = await self.cart_repo.get_by_product_id(
+                user_id=user_id,
+                product_id=product_id,
+            )
+
+            if updated_item is None:
+                raise CartItemNotFoundError()
+
             await self.db.commit()
+
+            return updated_item
 
         except Exception:
             await self.db.rollback()
             raise
-
-        return await self._get_cart_item(user_id, product_id)
 
     async def remove_item(
         self,
@@ -145,15 +193,21 @@ class CartService:
         """
         Удаляет товар из корзины пользователя.
         """
-        cart_item = await self.cart_repo.get_by_product_id(
-            user_id=user_id,
-            product_id=product_id,
-        )
-
-        if cart_item is None:
-            raise CartItemNotFoundError()
-
         try:
+            # Блокируем пользователя перед изменением корзины.
+            await self.cart_repo.lock_user_cart(user_id)
+
+            # Получаем и блокируем позицию корзины.
+            cart_item = (
+                await self.cart_repo.get_by_product_id_for_update(
+                    user_id=user_id,
+                    product_id=product_id,
+                )
+            )
+
+            if cart_item is None:
+                raise CartItemNotFoundError()
+
             await self.cart_repo.delete(cart_item)
             await self.db.commit()
 
@@ -166,27 +220,12 @@ class CartService:
         Удаляет все позиции из корзины пользователя.
         """
         try:
+            # Блокируем пользователя перед очисткой корзины.
+            await self.cart_repo.lock_user_cart(user_id)
+
             await self.cart_repo.clear(user_id)
             await self.db.commit()
 
         except Exception:
             await self.db.rollback()
             raise
-
-    async def _get_cart_item(
-        self,
-        user_id: int,
-        product_id: int,
-    ) -> CartItem:
-        """
-        Получает позицию корзины вместе с данными товара.
-        """
-        cart_item = await self.cart_repo.get_by_product_id(
-            user_id=user_id,
-            product_id=product_id,
-        )
-
-        if cart_item is None:
-            raise CartItemNotFoundError()
-
-        return cart_item

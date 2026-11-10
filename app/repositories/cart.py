@@ -1,9 +1,9 @@
-from sqlalchemy import select, delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.cart_items import CartItem
-
+from app.models.users import User
 
 class CartRepository:
 
@@ -18,6 +18,7 @@ class CartRepository:
             select(CartItem)
             .options(selectinload(CartItem.product))
             .where(CartItem.user_id == user_id)
+            .order_by(CartItem.id)
         )
 
         return list(result.all())
@@ -37,7 +38,9 @@ class CartRepository:
 
         return result
 
-    async def get_by_product_id(self, user_id: int, product_id: int) -> CartItem | None:
+    async def get_by_product_id(
+        self, user_id: int, product_id: int,
+    ) -> CartItem | None:
         """
         Находит позицию корзины по ID пользователя и товара.
         """
@@ -48,6 +51,23 @@ class CartRepository:
                 CartItem.user_id == user_id,
                 CartItem.product_id == product_id,
             )
+        )
+
+        return result
+
+    async def get_by_product_id_for_update(
+        self, user_id: int, product_id: int,
+    ) -> CartItem | None:
+        """
+        Получает позицию корзины и блокирует её до завершения транзакции.
+        """
+        result = await self.db.scalar(
+            select(CartItem)
+            .where(
+                CartItem.user_id == user_id,
+                CartItem.product_id == product_id,
+            )
+            .with_for_update()
         )
 
         return result
@@ -76,7 +96,6 @@ class CartRepository:
         Обновляет количество товара в корзине.
         """
         cart_item.quantity = quantity
-
         await self.db.flush()
 
         return cart_item
@@ -95,22 +114,27 @@ class CartRepository:
         await self.db.execute(
             delete(CartItem).where(CartItem.user_id == user_id)
         )
-
         await self.db.flush()
 
-    async def get_by_user_id_for_update(
-        self,
-        user_id: int,
-    ) -> list[CartItem]:
+    async def get_by_user_id_for_update(self, user_id: int) -> list[CartItem]:
         """
         Получает позиции корзины и блокирует их до завершения транзакции.
         """
         result = await self.db.scalars(
             select(CartItem)
-            .options(selectinload(CartItem.product))
             .where(CartItem.user_id == user_id)
             .order_by(CartItem.id)
             .with_for_update()
         )
 
         return list(result.all())
+
+    async def lock_user_cart(self, user_id: int) -> None:
+        """
+        Блокирует строку пользователя на время изменения его корзины.
+        """
+        await self.db.scalar(
+            select(User)
+            .where(User.id == user_id)
+            .with_for_update()
+        )

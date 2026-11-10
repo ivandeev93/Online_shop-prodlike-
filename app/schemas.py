@@ -249,6 +249,7 @@ class OrderItem(BaseModel):
     """
     id: int = Field(..., description="ID позиции заказа")
     product_id: int | None = Field(None, description="ID товара")
+    product_name: str = Field(description="Название товара на момент оформления заказа")
     quantity: int = Field(ge=1, description="Количество")
     unit_price: Decimal = Field(ge=0, description="Цена за единицу на момент покупки")
     product: Product | None = Field(None, description="Полная информация о товаре")

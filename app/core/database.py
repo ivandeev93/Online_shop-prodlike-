@@ -6,7 +6,7 @@ from app.config import settings
 
 engine = create_async_engine(
     settings.database_url,
-    echo=True,        # True для отладки
+    echo=False,        # True для отладки
     pool_size=10,
     max_overflow=20
 )

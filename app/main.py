@@ -19,6 +19,7 @@ from app.core.exception_handlers import (
     cart_item_not_found_handler,
     insufficient_stock_handler,
     cart_is_empty_handler,
+    invalid_cart_quantity_handler,
     order_not_found_handler,
     order_product_unavailable_handler,
     review_not_found_handler,
@@ -42,6 +43,7 @@ from app.exceptions.user import (
 from app.exceptions.cart import (
     CartItemNotFoundError,
     InsufficientStockError,
+    InvalidCartQuantityError,
 )
 from app.exceptions.order import (
     CartIsEmptyError,
@@ -143,6 +145,11 @@ app.add_exception_handler(
 app.add_exception_handler(
     CartIsEmptyError,
     cart_is_empty_handler,
+)
+
+app.add_exception_handler(
+    InvalidCartQuantityError,
+    invalid_cart_quantity_handler,
 )
 
 

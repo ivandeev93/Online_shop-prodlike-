@@ -35,6 +35,9 @@ class OrderService:
         Оформляет заказ на основе корзины пользователя.
         """
         try:
+            # Блокируем пользователя, чтобы сериализовать операции с его корзиной.
+            await self.cart_repo.lock_user_cart(user_id)
+
             # Блокируем позиции корзины, чтобы исключить повторное оформление.
             cart_items = await self.cart_repo.get_by_user_id_for_update(
                 user_id

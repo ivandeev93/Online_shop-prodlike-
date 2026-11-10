@@ -6,6 +6,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.products import Product
+from app.models.categories import Category
 
 
 class ProductRepository:

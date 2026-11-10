@@ -100,7 +100,7 @@ async def get_products_by_category(
     Возвращает список активных товаров в указанной категории по её ID.
     """
     # Проверяем, что категория существует и активна.
-    await category_service.get_by_id(category_id)
+    await category_service.get_category_by_id(category_id)
 
     items, total = await product_service.get_all_products(
         page=page,
