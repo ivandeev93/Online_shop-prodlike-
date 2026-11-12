@@ -33,7 +33,7 @@ from app.services.product import ProductService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/products", tags=["products"])
+router = APIRouter(prefix="/products", tags=["Products"])
 
 
 @router.get("/", response_model=ProductList)

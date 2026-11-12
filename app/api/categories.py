@@ -7,7 +7,7 @@ from app.schemas import Category, CategoryCreate
 from app.services.category import CategoryService
 
 
-router = APIRouter(prefix="/categories", tags=["categories"])
+router = APIRouter(prefix="/categories", tags=["Categories"])
 
 
 @router.get("/", response_model=list[Category])
